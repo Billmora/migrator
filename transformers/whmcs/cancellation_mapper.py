@@ -9,6 +9,9 @@ class CancellationMapper(BaseMapper):
     Maps WHMCS tblcancelrequests to Billmora service_cancellations.
     """
 
+    def __init__(self, service_mapper=None):
+        self.service_mapper = service_mapper
+
     def map_cancel_requests(self, row: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
         cancel_id = self.safe_int(row.get("id"))
         if not cancel_id:
@@ -26,11 +29,15 @@ class CancellationMapper(BaseMapper):
             cancel_type = "end_of_period"
 
         date = self.map_date(row.get("date")) or self.map_date(row.get("created_at"))
+        
+        user_id = 1
+        if self.service_mapper:
+            user_id = self.service_mapper.hosting_to_user_id.get(service_id, 1)
 
         cancel_dict = {
             "id": cancel_id,
             "service_id": service_id,
-            "user_id": 1,  # WHMCS tblcancelrequests doesn't store userid, FK fallback
+            "user_id": user_id,  # Resolved from tblhosting
             "reviewed_by": None,
             "status": "pending",
             "type": cancel_type,
