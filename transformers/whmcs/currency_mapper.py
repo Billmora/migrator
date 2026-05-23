@@ -12,6 +12,7 @@ class CurrencyMapper(BaseMapper):
 
     def __init__(self):
         self.id_to_code: Dict[int, str] = {}
+        self.default_code = "USD"
 
     def map_currencies(self, row: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
         currency_id = self.safe_int(row.get("id"))
@@ -34,6 +35,8 @@ class CurrencyMapper(BaseMapper):
         billmora_format = format_map.get(whmcs_format, "1234.56")
 
         is_default = 1 if str(row.get("default", "0")) == "1" else 0
+        if is_default:
+            self.default_code = code
 
         currency_dict = {
             "id": currency_id,
@@ -52,4 +55,10 @@ class CurrencyMapper(BaseMapper):
     def get_code(self, currency_id: Any) -> str:
         """Lookup currency code by WHMCS currency ID."""
         cid = self.safe_int(currency_id, default=0)
-        return self.id_to_code.get(cid, "USD")
+        if cid == 0:
+            return self.default_code
+        return self.id_to_code.get(cid, self.default_code)
+
+    def get_default_code(self) -> str:
+        """Get the default currency code."""
+        return self.default_code

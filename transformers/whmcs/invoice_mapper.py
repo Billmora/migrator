@@ -45,7 +45,7 @@ class InvoiceMapper(BaseMapper):
             "plugin_id": None,
             "invoice_number": invoicenum,
             "status": whmcs_status,
-            "currency": self.currency_mapper.get_code(row.get("currency", "1")) if self.currency_mapper else "USD",
+            "currency": self.currency_mapper.get_default_code() if self.currency_mapper else "USD",
             "subtotal": self.safe_float(row.get("subtotal", 0.0)),
             "discount": self.safe_float(row.get("credit", 0.0)),
             "tax": self.safe_float(row.get("tax", 0.0)) + self.safe_float(row.get("tax2", 0.0)),

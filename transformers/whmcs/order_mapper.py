@@ -36,15 +36,7 @@ class OrderMapper(BaseMapper):
         amount = self.safe_float(row.get("amount", 0.0))
         date = self.map_date(row.get("date"))
 
-        # Resolve currency - WHMCS orders don't have a currency column directly,
-        # we can derive from invoice or default
-        currency = "USD"
-        if self.currency_mapper:
-            # Try to find user's currency via invoice, fallback to default
-            for cid, code in self.currency_mapper.id_to_code.items():
-                if self.currency_mapper.id_to_code.get(1):
-                    currency = self.currency_mapper.id_to_code.get(1, "USD")
-                    break
+        currency = self.currency_mapper.get_default_code() if self.currency_mapper else "USD"
 
         completed_at = date if billmora_status == "completed" else None
         cancelled_at = date if billmora_status == "cancelled" else None
