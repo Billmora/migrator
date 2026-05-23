@@ -25,24 +25,38 @@ It uses a fast, low-memory stream parsing engine and a **Two-Pass Architecture**
 ## Supported Platforms
 
 You can specify the source platform using the `--source` argument. Currently supported sources include:
+
 - `whmcs` (More platforms like Blesta, ClientExec, and WemX can be added easily via the extensible extractor/mapper system)
+
+## Installation
+
+First, clone the repository to your local machine:
+
+```bash
+git clone https://github.com/Billmora/migrator.git
+cd migrator
+```
 
 ## Usage Commands
 
 Here are the primary commands you can use with this migrator:
 
 ### 1. Run the Migrator
+
 This is the main command to execute the migration. It will read your source SQL dump and generate a new SQL file formatted for Billmora.
 
 ```bash
 python main.py --source <platform_name> --input <source_db.sql> --output <output_import.sql>
 ```
+
 **Example:**
+
 ```bash
 python main.py --source whmcs --input backup_billing.sql --output billmora_import.sql
 ```
 
 ### 2. Verify Generated SQL (Statistics)
+
 After generating the `billmora_import.sql` file, you can run this utility to quickly check the number of rows generated for each Billmora table. This helps ensure all data was migrated successfully.
 
 ```bash
@@ -50,6 +64,7 @@ python verify_counts.py billmora_import.sql
 ```
 
 ### 3. Utility: List Tables
+
 If you want to see all the tables present in your source SQL dump, use this command:
 
 ```bash
@@ -57,12 +72,15 @@ python list_tables.py <source_db.sql>
 ```
 
 ### 4. Utility: Inspect Columns
+
 If you need to debug or verify the exact column names being extracted from a specific table in the source SQL dump:
 
 ```bash
 python inspect_columns.py <source_db.sql> <table_name>
 ```
+
 **Example:**
+
 ```bash
 python inspect_columns.py backup_billing.sql users_table
 ```
