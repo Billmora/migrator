@@ -1,3 +1,4 @@
+import json
 from typing import Dict, Any, List, Tuple
 from transformers.base_mapper import BaseMapper
 from core.logger import get_logger
@@ -7,10 +8,13 @@ logger = get_logger(__name__)
 class DomainMapper(BaseMapper):
     """
     Maps WHMCS tbldomains to Billmora registrants.
+    Auto-creates Billmora tlds entries based on extracted domains.
     """
 
     def __init__(self, currency_mapper=None):
         self.currency_mapper = currency_mapper
+        self.tld_map = {} # string -> int
+        self.next_tld_id = 1
 
     def map_domains(self, row: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
         domain_id = self.safe_int(row.get("id"))
@@ -21,6 +25,41 @@ class DomainMapper(BaseMapper):
         domain = row.get("domain", "")
         if not domain:
             return []
+
+        results = []
+
+        # Extract TLD
+        parts = domain.split(".")
+        if len(parts) > 1:
+            # handle cases like .co.uk or .com
+            # To keep it simple, we just take the last part. Or last two if .co.uk?
+            # A common approach is to split on first dot.
+            tld_str = domain.split(".", 1)[1].lower()
+        else:
+            tld_str = "com"
+
+        if tld_str not in self.tld_map:
+            tld_id = self.next_tld_id
+            self.tld_map[tld_str] = tld_id
+            self.next_tld_id += 1
+            
+            tlds_dict = {
+                "id": tld_id,
+                "tld": tld_str,
+                "plugin_id": None, # Will need manual configuration later
+                "min_years": 1,
+                "max_years": 10,
+                "grace_period_days": 0,
+                "redemption_period_days": 0,
+                "whois_privacy": 0,
+                "status": "visible",
+                "sort_order": 0,
+                "created_at": None,
+                "updated_at": None
+            }
+            results.append(("tlds", tlds_dict))
+        else:
+            tld_id = self.tld_map[tld_str]
 
         # Status mapping
         whmcs_status = str(row.get("status", "")).lower()
@@ -41,12 +80,7 @@ class DomainMapper(BaseMapper):
         reg_type = "transfer" if "transfer" in whmcs_type else "register"
 
         # Currency fallback
-        currency = "USD"
-        if self.currency_mapper and self.currency_mapper.id_to_code:
-            # Use default currency
-            for cid, code in self.currency_mapper.id_to_code.items():
-                currency = code
-                break
+        currency = self.currency_mapper.get_default_code() if self.currency_mapper else "USD"
 
         order_id = self.safe_int(row.get("orderid", 0)) or None
         auto_renew = 0 if self.safe_int(row.get("donotrenew", 0)) else 1
@@ -60,7 +94,7 @@ class DomainMapper(BaseMapper):
             "user_id": user_id,
             "order_id": order_id,
             "order_item_id": None,
-            "tld_id": 1,  # Fallback, TLDs are configured fresh in Billmora
+            "tld_id": tld_id,
             "plugin_id": None,
             "domain": domain,
             "status": billmora_status,
@@ -79,4 +113,5 @@ class DomainMapper(BaseMapper):
             "updated_at": self.map_date(row.get("updated_at", reg_date)),
         }
 
-        return [("registrants", registrant_dict)]
+        results.append(("registrants", registrant_dict))
+        return results
