@@ -52,11 +52,17 @@ class UserMapper(BaseMapper):
             "email": email,
             "password": row.get("password", ""),
             "is_root_admin": 0,
+            "department": None,
+            "auto_credit_payment": 0,
             "status": billmora_status,
             "language": row.get("language", "en_US") or "en_US",
             "email_verified_at": created_at if email_verified else None,
+            "oauth_provider": None,
+            "oauth_provider_id": None,
+            "remember_token": None,
             "created_at": created_at,
-            "updated_at": self.map_date(row.get("updated_at", created_at))
+            "updated_at": self.map_date(row.get("updated_at", created_at)),
+            "deleted_at": None
         }
 
         # 2. Map to user_billings

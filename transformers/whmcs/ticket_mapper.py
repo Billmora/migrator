@@ -87,7 +87,7 @@ class TicketMapper(BaseMapper):
             "last_reply_at": last_reply,
             "closed_at": closed_at,
             "created_at": date,
-            "updated_at": self.map_date(row.get("updated_at", date)),
+            "updated_at": self.map_date(row.get("updated_at")) or date,
         }
         results.append(("tickets", ticket_dict))
 
@@ -96,11 +96,11 @@ class TicketMapper(BaseMapper):
         if message:
             msg_dict = {
                 "ticket_id": ticket_id,
-                "user_id": user_id,
+                "user_id": user_id if user_id > 0 else 1,
                 "message": message,
                 "is_staff_reply": 0,
                 "created_at": date,
-                "updated_at": date,
+                "updated_at": self.map_date(row.get("updated_at")) or date,
             }
             results.append(("ticket_messages", msg_dict))
 

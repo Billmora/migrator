@@ -57,6 +57,13 @@ class SQLGenerator:
         """
         Queues a dictionary of data to be inserted into a table.
         """
+        # Ensure created_at and updated_at are never None (Laravel requirement)
+        fallback_date = "2026-05-23 00:00:00"
+        if "created_at" in data and data["created_at"] is None:
+            data["created_at"] = fallback_date
+        if "updated_at" in data and data["updated_at"] is None:
+            data["updated_at"] = fallback_date
+
         if table not in self.buffer:
             self.buffer[table] = []
         
