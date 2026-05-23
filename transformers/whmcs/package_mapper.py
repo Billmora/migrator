@@ -21,6 +21,10 @@ class PackageMapper(BaseMapper):
         # Track which relids we have emitted in Pass 2 to avoid duplicates
         self.emitted_pricing = set()
 
+        # Track slugs to prevent DB unique constraint violations
+        self.generated_catalog_slugs = set()
+        self.generated_package_slugs = {} # catalog_id -> set of slugs
+
     def _generate_slug(self, text: str) -> str:
         if not text:
             return "unknown-slug"
@@ -35,13 +39,24 @@ class PackageMapper(BaseMapper):
 
         name = row.get("name", f"Catalog {catalog_id}")
         headline = row.get("headline", "")
-        slug_src = headline if headline else name
         is_hidden = self.safe_int(row.get("hidden", 0))
+        
+        base_slug = row.get("slug")
+        if not base_slug:
+            slug_src = headline if headline else name
+            base_slug = self._generate_slug(slug_src)
+            
+        catalog_slug = base_slug
+        counter = 1
+        while catalog_slug in self.generated_catalog_slugs:
+            catalog_slug = f"{base_slug}-{counter}"
+            counter += 1
+        self.generated_catalog_slugs.add(catalog_slug)
         
         catalog_dict = {
             "id": catalog_id,
             "name": name,
-            "slug": self._generate_slug(slug_src),
+            "slug": catalog_slug,
             "description": row.get("tagline", "") or "",
             "icon": None,
             "status": "hidden" if is_hidden else "visible",
@@ -67,11 +82,27 @@ class PackageMapper(BaseMapper):
         stock_control = self.safe_int(row.get("stockcontrol", 0))
         stock = qty if stock_control else -1
 
+        catalog_id = self.safe_int(row.get("gid", 0))
+
+        if catalog_id not in self.generated_package_slugs:
+            self.generated_package_slugs[catalog_id] = set()
+
+        base_slug = row.get("slug")
+        if not base_slug:
+            base_slug = self._generate_slug(name)
+            
+        package_slug = base_slug
+        counter = 1
+        while package_slug in self.generated_package_slugs[catalog_id]:
+            package_slug = f"{base_slug}-{counter}"
+            counter += 1
+        self.generated_package_slugs[catalog_id].add(package_slug)
+
         package_dict = {
             "id": package_id,
-            "catalog_id": self.safe_int(row.get("gid", 0)),
+            "catalog_id": catalog_id,
             "name": name,
-            "slug": self._generate_slug(name),
+            "slug": package_slug,
             "description": row.get("description", ""),
             "icon": None,
             "stock": stock,
@@ -172,6 +203,7 @@ class PackageMapper(BaseMapper):
         if self.currency_mapper:
             known_currencies.add(self.currency_mapper.get_default_code())
 
+        emitted_free = False
         for cycle, cycle_rates in acc.items():
             if not cycle_rates: continue # skip empty cycles
 
@@ -197,6 +229,9 @@ class PackageMapper(BaseMapper):
                     break
 
             if is_free:
+                if emitted_free:
+                    continue # Skip duplicate free entries for the same package
+                emitted_free = True
                 p_type = "free"
                 name = "Free"
                 for cur in rates_json:
