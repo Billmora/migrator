@@ -144,6 +144,7 @@ class VariantMapper(BaseMapper):
                     if pm.currency_mapper:
                         known_currencies.add(pm.currency_mapper.get_default_code())
 
+                    emitted_free = False
                     for cycle, cycle_rates in acc.items():
                         if not cycle_rates: continue
                         
@@ -169,6 +170,9 @@ class VariantMapper(BaseMapper):
                                 break
 
                         if is_free:
+                            if emitted_free:
+                                continue # Skip duplicate free entries for the same option
+                            emitted_free = True
                             p_type = "free"
                             cycle_name = "Free"
                             for cur in rates_json:
