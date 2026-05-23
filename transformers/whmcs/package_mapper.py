@@ -8,13 +8,20 @@ logger = get_logger(__name__)
 
 class PackageMapper(BaseMapper):
     
-    def __init__(self):
-        pass
+    def __init__(self, currency_mapper=None):
+        self.currency_mapper = currency_mapper
+        
+        # Accumulator: (type, relid) -> dict of cycles -> dict of currency -> price data
+        self.pricing_accumulator = {}
+        
+        # Lookup: (type, relid, cycle) -> package_price_id
+        self.package_price_lookup = {}
+        self.next_price_id = 1
+        
+        # Track which relids we have emitted in Pass 2 to avoid duplicates
+        self.emitted_pricing = set()
 
     def _generate_slug(self, text: str) -> str:
-        """
-        Generates a basic URL-friendly slug.
-        """
         if not text:
             return "unknown-slug"
         text = text.lower()
@@ -23,52 +30,39 @@ class PackageMapper(BaseMapper):
         return text
 
     def map_productgroups(self, row: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
-        """
-        Maps WHMCS tblproductgroups to Billmora catalogs.
-        """
         catalog_id = self.safe_int(row.get("id"))
-        if not catalog_id:
-            return []
+        if not catalog_id: return []
 
         name = row.get("name", f"Catalog {catalog_id}")
-        # WHMCS doesn't strictly have a slug, we generate one from the name or headline
         headline = row.get("headline", "")
         slug_src = headline if headline else name
-        
         is_hidden = self.safe_int(row.get("hidden", 0))
         
         catalog_dict = {
             "id": catalog_id,
             "name": name,
-            "slug": self._generate_slug(slug_src) + f"-{catalog_id}",
+            "slug": self._generate_slug(slug_src),
             "description": row.get("tagline", "") or "",
             "icon": None,
             "status": "hidden" if is_hidden else "visible",
             "sort_order": self.safe_int(row.get("order", 0)),
             "created_at": self.map_date(row.get("created_at")),
-            "updated_at": self.map_date(row.get("updated_at"))
+            "updated_at": self.map_date(row.get("updated_at", row.get("created_at")))
         }
-
         return [("catalogs", catalog_dict)]
 
     def map_products(self, row: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
-        """
-        Maps WHMCS tblproducts to Billmora packages.
-        """
         package_id = self.safe_int(row.get("id"))
-        if not package_id:
-            return []
+        if not package_id: return []
 
         name = row.get("name", f"Package {package_id}")
         is_hidden = self.safe_int(row.get("hidden", 0))
         retired = self.safe_int(row.get("retired", 0))
 
-        # Determine status
         status = "visible"
         if is_hidden or retired:
             status = "hidden"
 
-        # Stock control in WHMCS
         qty = self.safe_int(row.get("qty", 0))
         stock_control = self.safe_int(row.get("stockcontrol", 0))
         stock = qty if stock_control else -1
@@ -77,73 +71,151 @@ class PackageMapper(BaseMapper):
             "id": package_id,
             "catalog_id": self.safe_int(row.get("gid", 0)),
             "name": name,
-            "slug": self._generate_slug(name) + f"-{package_id}",
+            "slug": self._generate_slug(name),
             "description": row.get("description", ""),
             "icon": None,
             "stock": stock,
             "per_user_limit": -1,
             "allow_cancellation": 1,
-            "allow_quantity": "single", # WHMCS defaults
+            "allow_quantity": "single",
             "status": status,
             "sort_order": self.safe_int(row.get("order", 0)),
-            "plugin_id": None, # Requires module mapping later
+            "plugin_id": None,
             "provisioning_config": None,
             "created_at": self.map_date(row.get("created_at")),
-            "updated_at": self.map_date(row.get("updated_at"))
+            "updated_at": self.map_date(row.get("updated_at", row.get("created_at")))
         }
+
+        # If product is free or onetime, and has no pricing in tblpricing, we might need to emit a fallback price.
+        # But for now, rely on tblpricing. If it's free, it usually has a tblpricing row with 0.00 or type='onetime'.
 
         return [("packages", package_dict)]
 
-    def map_pricing(self, row: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
-        """
-        Maps WHMCS tblpricing to Billmora package_prices (rates column).
-        """
-        # We only map product pricing (type = 'product')
-        # Billmora uses package_prices which has a JSON rates column.
-        if row.get("type") != "product":
-            return []
-
+    def extract_pricing(self, row: Dict[str, Any]):
+        """PASS 1: Accumulate pricing to group currencies."""
+        ptype = row.get("type")
+        if ptype not in ("product", "configoptions"):
+            return
+            
         relid = self.safe_int(row.get("relid"))
-        if not relid:
-            return []
-
-        # Parse WHMCS pricing matrix
-        rates = {}
+        if not relid: return
+            
+        currency_id = self.safe_int(row.get("currency", 1))
+        currency_code = self.currency_mapper.get_code(currency_id) if self.currency_mapper else "USD"
         
-        # Helper to safely add to rates if not -1
-        def add_rate(period: str, price_col: str, setup_col: str):
+        key = (ptype, relid)
+        if key not in self.pricing_accumulator:
+            self.pricing_accumulator[key] = {
+                "monthly": {}, "quarterly": {}, "semiannually": {}, 
+                "annually": {}, "biennially": {}, "triennially": {}
+            }
+            
+        acc = self.pricing_accumulator[key]
+        
+        def add_rate(cycle, price_col, setup_col):
             price = self.safe_float(row.get(price_col, -1.0))
             setup = self.safe_float(row.get(setup_col, 0.0))
             if price >= 0:
-                rates[period] = {
-                    "setup": max(0.0, setup),
-                    "price": price
+                acc[cycle][currency_code] = {
+                    "currency": currency_code,
+                    "price": str(price),
+                    "setup_fee": str(max(0.0, setup)),
+                    "enabled": True
                 }
 
         add_rate("monthly", "monthly", "msetupfee")
         add_rate("quarterly", "quarterly", "qsetupfee")
-        add_rate("semi-annually", "semiannually", "ssetupfee")
+        add_rate("semiannually", "semiannually", "ssetupfee")
         add_rate("annually", "annually", "asetupfee")
         add_rate("biennially", "biennially", "bsetupfee")
         add_rate("triennially", "triennially", "tsetupfee")
 
-        if not rates:
+        # Also allocate package_price_id for each valid cycle
+        for cycle in acc.keys():
+            if acc[cycle] and (ptype, relid, cycle) not in self.package_price_lookup:
+                self.package_price_lookup[(ptype, relid, cycle)] = self.next_price_id
+                self.next_price_id += 1
+
+    def map_pricing(self, row: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
+        """PASS 2: Emit the accumulated pricing."""
+        ptype = row.get("type")
+        if ptype != "product":
             return []
 
-        # We don't have a specific ID for package_prices, we map directly to the package
-        # but we need to generate an ID or let MySQL auto-increment if we don't supply one.
-        # But wait, without an ID, we can't link variants. Fortunately, we aren't doing variants right now.
+        relid = self.safe_int(row.get("relid"))
+        if not relid: return []
+
+        # Only emit once per product
+        if relid in self.emitted_pricing:
+            return []
+        self.emitted_pricing.add(relid)
+
+        acc = self.pricing_accumulator.get((ptype, relid))
+        if not acc: return []
+
+        results = []
         
-        # We will let MySQL auto-increment the ID by not providing it
-        price_dict = {
-            "package_id": relid,
-            "name": "Default Pricing",
-            "type": "recurring",
-            "time_interval": None,
-            "billing_period": None,
-            "rates": rates, # Dict will be JSON-encoded by SQLGenerator
-            "created_at": None,
-            "updated_at": None
+        CYCLE_MAP = {
+            "monthly": ("Monthly", 1, "monthly"),
+            "quarterly": ("Quarterly", 3, "monthly"),
+            "semiannually": ("Semi-Annually", 6, "monthly"),
+            "annually": ("Annually", 1, "yearly"),
+            "biennially": ("Biennially", 2, "yearly"),
+            "triennially": ("Triennially", 3, "yearly"),
         }
 
-        return [("package_prices", price_dict)]
+        # Build full disabled rates template based on all known currencies
+        known_currencies = set()
+        for cycle_rates in acc.values():
+            known_currencies.update(cycle_rates.keys())
+        
+        if self.currency_mapper:
+            known_currencies.add(self.currency_mapper.get_default_code())
+
+        for cycle, cycle_rates in acc.items():
+            if not cycle_rates: continue # skip empty cycles
+
+            rates_json = {}
+            for cur in known_currencies:
+                if cur in cycle_rates:
+                    rates_json[cur] = cycle_rates[cur]
+                else:
+                    rates_json[cur] = {
+                        "currency": cur,
+                        "price": None,
+                        "setup_fee": None,
+                        "enabled": False
+                    }
+
+            price_id = self.package_price_lookup.get((ptype, relid, cycle))
+            name, interval, period = CYCLE_MAP[cycle]
+
+            is_free = True
+            for cr in cycle_rates.values():
+                if float(cr.get("price", 0)) > 0 or float(cr.get("setup_fee", 0)) > 0:
+                    is_free = False
+                    break
+
+            if is_free:
+                p_type = "free"
+                name = "Free"
+                for cur in rates_json:
+                    rates_json[cur]["price"] = None
+                    rates_json[cur]["setup_fee"] = None
+            else:
+                p_type = "recurring"
+
+            price_dict = {
+                "id": price_id,
+                "package_id": relid,
+                "name": name,
+                "type": p_type,
+                "time_interval": interval,
+                "billing_period": period,
+                "rates": rates_json,
+                "created_at": None,
+                "updated_at": None
+            }
+            results.append(("package_prices", price_dict))
+
+        return results
