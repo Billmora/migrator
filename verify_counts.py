@@ -16,6 +16,6 @@ with open("billmora_import.sql", "r", encoding="utf-8") as f:
             if line.endswith(";"):
                 current_table = None
 
-print("=== Statistik Migrasi Data ===")
+print("=== Data Migration Statistics ===")
 for table, count in counts.items():
-    print(f"{table}: {count} baris")
+    print(f"{table}: {count} rows")
