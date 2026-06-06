@@ -74,6 +74,10 @@ class ServiceMapper(BaseMapper):
 
         if whmcs_cycle in ["one time", "onetime"]:
             billing_type = "onetime"
+            cycle_key = "monthly"
+        elif whmcs_cycle in ["free account", "free"]:
+            billing_type = "free"
+            cycle_key = "monthly"
         elif whmcs_cycle == "monthly":
             billing_type = "recurring"
             billing_interval = 1
