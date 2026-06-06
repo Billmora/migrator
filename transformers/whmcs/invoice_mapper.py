@@ -73,7 +73,9 @@ class InvoiceMapper(BaseMapper):
         relid = self.safe_int(row.get("relid", 0))
         
         service_id = relid if whmcs_type == "hosting" and relid > 0 else None
-        registrant_id = relid if whmcs_type == "domainregister" and relid > 0 else None
+        
+        is_domain = whmcs_type in ["domainregister", "domaintransfer", "domainrenewal"]
+        registrant_id = relid if is_domain and relid > 0 else None
 
         amount = self.safe_float(row.get("amount", 0.0))
 
