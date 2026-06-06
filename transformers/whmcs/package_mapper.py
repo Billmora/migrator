@@ -203,7 +203,6 @@ class PackageMapper(BaseMapper):
         if self.currency_mapper:
             known_currencies.add(self.currency_mapper.get_default_code())
 
-        emitted_free = False
         for cycle, cycle_rates in acc.items():
             if not cycle_rates: continue # skip empty cycles
 
@@ -229,11 +228,7 @@ class PackageMapper(BaseMapper):
                     break
 
             if is_free:
-                if emitted_free:
-                    continue # Skip duplicate free entries for the same package
-                emitted_free = True
                 p_type = "free"
-                name = "Free"
                 for cur in rates_json:
                     rates_json[cur]["price"] = None
                     rates_json[cur]["setup_fee"] = None
