@@ -172,6 +172,8 @@ class ServiceMapper(BaseMapper):
             "terminated_at": terminated_at,
             "cancelled_at": cancelled_at,
             "configuration": configuration,
+            "fields": None,
+            "admin_notes": None,
             "created_at": created_at,
             "updated_at": updated_at
         }
