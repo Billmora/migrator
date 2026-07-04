@@ -7,10 +7,11 @@ logger = get_logger(__name__)
 
 class ServiceMapper(BaseMapper):
 
-    def __init__(self, currency_mapper=None, package_mapper=None, variant_mapper=None):
+    def __init__(self, currency_mapper=None, package_mapper=None, variant_mapper=None, plugin_mapper=None):
         self.currency_mapper = currency_mapper
         self.package_mapper = package_mapper
         self.variant_mapper = variant_mapper
+        self.plugin_mapper = plugin_mapper
         
         self.hosting_to_user_id = {}
         self.hosting_variant_selections = {} # hosting_id -> dict of variant_id -> [variant_option_id]
@@ -154,7 +155,7 @@ class ServiceMapper(BaseMapper):
             "order_item_id": None,
             "package_id": package_id if package_id > 0 else 1,
             "package_price_id": package_price_id,
-            "plugin_id": None,
+            "plugin_id": None, # Services inherit provisioning logic from their package in Billmora
             "variant_selections": variant_selections,
             "name": name,
             "status": whmcs_status,

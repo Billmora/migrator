@@ -37,12 +37,14 @@ class MigrationEngine:
             from transformers.whmcs.coupon_mapper import CouponMapper
             from transformers.whmcs.cancellation_mapper import CancellationMapper
             from transformers.whmcs.variant_mapper import VariantMapper
+            from transformers.whmcs.plugin_mapper import PluginMapper
 
+            plugin_mapper = PluginMapper()
             currency_mapper = CurrencyMapper()
             user_mapper = UserMapper(currency_mapper=currency_mapper)
-            package_mapper = PackageMapper(currency_mapper=currency_mapper)
+            package_mapper = PackageMapper(currency_mapper=currency_mapper, plugin_mapper=plugin_mapper)
             variant_mapper = VariantMapper(package_mapper=package_mapper)
-            service_mapper = ServiceMapper(currency_mapper=currency_mapper, package_mapper=package_mapper, variant_mapper=variant_mapper)
+            service_mapper = ServiceMapper(currency_mapper=currency_mapper, package_mapper=package_mapper, variant_mapper=variant_mapper, plugin_mapper=plugin_mapper)
             invoice_mapper = InvoiceMapper(currency_mapper=currency_mapper)
             order_mapper = OrderMapper(currency_mapper=currency_mapper)
             ticket_mapper = TicketMapper()
@@ -58,6 +60,7 @@ class MigrationEngine:
                 "tblpricing": [package_mapper.extract_pricing],
                 "tblproductconfiggroups": [variant_mapper.extract_configgroups],
                 "tblproductconfigoptions": [variant_mapper.extract_configoptions],
+                "tblproducts": [plugin_mapper.extract_plugins],
                 "tblhosting": [service_mapper.extract_hosting],
                 "tblhostingconfigoptions": [service_mapper.extract_hostingconfigoptions],
             }
@@ -67,7 +70,7 @@ class MigrationEngine:
                 "tblclients": [user_mapper.map_clients],
                 "tbladmins": [user_mapper.map_admins],
                 "tblproductgroups": [package_mapper.map_productgroups],
-                "tblproducts": [package_mapper.map_products],
+                "tblproducts": [plugin_mapper.map_plugins, package_mapper.map_products],
                 "tblpricing": [package_mapper.map_pricing],
                 "tblproductconfigoptions": [variant_mapper.map_productconfigoptions],
                 "tblproductconfigoptionssub": [variant_mapper.map_productconfigoptionssub],

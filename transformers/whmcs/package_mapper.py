@@ -8,8 +8,9 @@ logger = get_logger(__name__)
 
 class PackageMapper(BaseMapper):
     
-    def __init__(self, currency_mapper=None):
+    def __init__(self, currency_mapper=None, plugin_mapper=None):
         self.currency_mapper = currency_mapper
+        self.plugin_mapper = plugin_mapper
         
         # Accumulator: (type, relid) -> dict of cycles -> dict of currency -> price data
         self.pricing_accumulator = {}
@@ -98,6 +99,22 @@ class PackageMapper(BaseMapper):
             counter += 1
         self.generated_package_slugs[catalog_id].add(package_slug)
 
+        servertype = str(row.get("servertype", "")).strip().lower()
+        plugin_id = None
+        if self.plugin_mapper and servertype and servertype != "none":
+            plugin_id = self.plugin_mapper.servertype_to_plugin_id.get(servertype)
+
+        # Auto provision mapping
+        auto_provision = 0
+        autocreate = str(row.get("autocreate", "")).strip().lower()
+        if autocreate and autocreate != "off":
+            auto_provision = 1
+
+        # Prorata mapping
+        prorata_day = 0
+        if self.safe_int(row.get("proratabilling", 0)):
+            prorata_day = self.safe_int(row.get("proratadate", 0))
+
         package_dict = {
             "id": package_id,
             "catalog_id": catalog_id,
@@ -108,10 +125,12 @@ class PackageMapper(BaseMapper):
             "stock": stock,
             "per_user_limit": -1,
             "allow_cancellation": 1,
+            "prorata_day": prorata_day,
             "allow_quantity": "single",
+            "auto_provision": auto_provision,
             "status": status,
             "sort_order": self.safe_int(row.get("order", 0)),
-            "plugin_id": None,
+            "plugin_id": plugin_id,
             "provisioning_config": None,
             "created_at": self.map_date(row.get("created_at")),
             "updated_at": self.map_date(row.get("updated_at", row.get("created_at")))
