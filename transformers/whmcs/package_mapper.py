@@ -112,8 +112,10 @@ class PackageMapper(BaseMapper):
 
         # Prorata mapping
         prorata_day = 0
+        prorata_next_month_day = 0
         if self.safe_int(row.get("proratabilling", 0)):
             prorata_day = self.safe_int(row.get("proratadate", 0))
+            prorata_next_month_day = self.safe_int(row.get("proratachargenextmonth", 0))
 
         package_dict = {
             "id": package_id,
@@ -126,6 +128,7 @@ class PackageMapper(BaseMapper):
             "per_user_limit": -1,
             "allow_cancellation": 1,
             "prorata_day": prorata_day,
+            "prorata_next_month_day": prorata_next_month_day,
             "allow_quantity": "single",
             "auto_provision": auto_provision,
             "status": status,
