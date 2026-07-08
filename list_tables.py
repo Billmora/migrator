@@ -8,7 +8,7 @@ with open("octaviai76_web_billing.sql", "r", encoding="utf-8") as f:
             if m:
                 tables.add(m.group(1))
 
-print("=== Semua tabel WHMCS yang berisi data ===")
+print("=== All WHMCS tables that contain data ===")
 for t in sorted(tables):
     print(t)
-print(f"\nTotal: {len(tables)} tabel")
+print(f"\nTotal: {len(tables)} tables")
