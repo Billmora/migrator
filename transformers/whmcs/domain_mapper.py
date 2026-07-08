@@ -51,7 +51,6 @@ class DomainMapper(BaseMapper):
                 "max_years": 10,
                 "grace_period_days": 0,
                 "redemption_period_days": 0,
-                "whois_privacy": 0,
                 "status": "visible",
                 "sort_order": 0,
                 "created_at": None,
